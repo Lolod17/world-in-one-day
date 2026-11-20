@@ -16,9 +16,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 W = H = 1024
-M = 40                      # page margin
-COLW = 304                  # width of one of the three splash columns
-GUTTER = 16
+M = 40
 
 PAPER = (246, 241, 231)
 INK = (20, 17, 14)
@@ -28,9 +26,9 @@ RED = (168, 18, 27)
 BLUE = (20, 57, 110)
 TEAL = (14, 92, 99)
 SAND = (200, 162, 74)
-SLATE = (46, 50, 60)
 STONE = (201, 192, 174)
-RIVER = (126, 154, 163)
+GREEN = (40, 92, 62)
+PLUM = (94, 44, 96)
 
 SERIF_B = "/System/Library/Fonts/Supplemental/Georgia Bold.ttf"
 SERIF = "/System/Library/Fonts/Supplemental/Georgia.ttf"
@@ -48,24 +46,19 @@ def font(path: str, size: int) -> ImageFont.FreeTypeFont:
     return FONT_CACHE[key]
 
 
-def text_w(draw: ImageDraw.ImageDraw, s: str, f: ImageFont.FreeTypeFont,
-           track: int = 0) -> int:
+def text_w(d, s, f, track=0) -> int:
     if not s:
         return 0
     if track:
-        return int(sum(draw.textlength(ch, font=f) for ch in s)) + track * (len(s) - 1)
-    return int(draw.textlength(s, font=f))
+        return int(sum(d.textlength(ch, font=f) for ch in s)) + track * (len(s) - 1)
+    return int(d.textlength(s, font=f))
 
 
-def wrap(draw: ImageDraw.ImageDraw, text: str, f: ImageFont.FreeTypeFont,
-         maxw: int) -> list[str]:
-    """Greedy wrap on spaces; returns the lines that fit maxw."""
-    words = text.split()
-    lines: list[str] = []
-    cur = ""
-    for w in words:
+def wrap(d, text, f, maxw) -> list[str]:
+    lines, cur = [], ""
+    for w in text.split():
         trial = f"{cur} {w}".strip()
-        if text_w(draw, trial, f) <= maxw or not cur:
+        if text_w(d, trial, f) <= maxw or not cur:
             cur = trial
         else:
             lines.append(cur)
@@ -75,306 +68,331 @@ def wrap(draw: ImageDraw.ImageDraw, text: str, f: ImageFont.FreeTypeFont,
     return lines
 
 
-def fit_block(draw, text, path, max_size, min_size, maxw, max_lines, step=1):
-    """Largest font size at which the text wraps into at most max_lines."""
-    size = max_size
-    while size > min_size:
-        f = font(path, size)
-        if len(wrap(draw, text, f, maxw)) <= max_lines:
-            return f
-        size -= step
-    return font(path, min_size)
-
-
-def fit_line(draw, text, path, maxw, hi, lo):
-    """Largest font size that keeps one word-line within maxw."""
+def fit_block(d, text, path, hi, lo, maxw, max_lines):
     size = hi
     while size > lo:
         f = font(path, size)
-        if text_w(draw, text, f) <= maxw:
+        if len(wrap(d, text, f, maxw)) <= max_lines:
             return f
         size -= 1
     return font(path, lo)
 
 
-def draw_tracked(draw, xy, s, f, fill, track=0):
+def fit_line(d, text, path, maxw, hi, lo):
+    size = hi
+    while size > lo:
+        f = font(path, size)
+        if text_w(d, text, f) <= maxw:
+            return f
+        size -= 1
+    return font(path, lo)
+
+
+def draw_tracked(d, xy, s, f, fill, track=0):
     x, y = xy
     for ch in s:
-        draw.text((x, y), ch, font=f, fill=fill)
-        x += draw.textlength(ch, font=f) + track
+        d.text((x, y), ch, font=f, fill=fill)
+        x += d.textlength(ch, font=f) + track
     return x
 
 
-# ---------------------------------------------------------------- artwork
+# ---------------------------------------------------------------- glyphs
+# One flat mark per field, so every story carries a picture rather than a line.
 
 
-def art_bridge(d: ImageDraw.ImageDraw, box) -> None:
-    """Night river with a struck bridge and two incoming missiles."""
-    x0, y0, x1, y1 = box
-    w, h = x1 - x0, y1 - y0
-    d.rectangle(box, fill=SLATE)
-    d.rectangle((x0, y0 + int(h * 0.62), x1, y1), fill=RIVER)
-    d.rectangle((x0, y0 + int(h * 0.60), x1, y0 + int(h * 0.64)), fill=INK)
-    deck_y = y0 + int(h * 0.50)
-    d.rectangle((x0, deck_y, x1, deck_y + 7), fill=INK)
-    span = w / 3.0
+def g_war(d, x, y, s=56):
+    d.polygon([(x + s * 0.52, y + s * 0.10), (x + s * 0.62, y + s * 0.34),
+               (x + s * 0.42, y + s * 0.34)], fill=RED)
+    d.rectangle((x + s * 0.46, y + s * 0.34, x + s * 0.58, y + s * 0.62), fill=RED)
+    d.polygon([(x + s * 0.46, y + s * 0.62), (x + s * 0.58, y + s * 0.62),
+               (x + s * 0.44, y + s * 0.76), (x + s * 0.34, y + s * 0.66)], fill=RED)
+    d.polygon([(x + s * 0.58, y + s * 0.62), (x + s * 0.46, y + s * 0.62),
+               (x + s * 0.60, y + s * 0.76), (x + s * 0.70, y + s * 0.66)], fill=RED)
     for i in range(3):
-        cx0 = x0 + span * i
-        d.arc((cx0 + 6, deck_y + 6, cx0 + span - 6, deck_y + int(h * 0.34)),
-              180, 360, fill=INK, width=5)
-    for i in range(4):
-        px = x0 + span * i
-        d.rectangle((px - 3, deck_y, px + 3, y0 + int(h * 0.66)), fill=INK)
-    d.rectangle((x0, y0 + int(h * 0.30), x1, y0 + int(h * 0.30) + 4),
-                fill=(70, 76, 88))
-    for sx, sy, ex, ey in ((x0 + w * 0.06, y0 + h * 0.04, x0 + w * 0.44, deck_y - 6),
-                           (x1 - w * 0.02, y0 + h * 0.12, x0 + w * 0.70, deck_y - 10)):
-        d.line((sx, sy, ex, ey), fill=(236, 232, 222), width=4)
-        d.line((sx, sy, ex, ey), fill=RED, width=2)
-    cx, cy = x0 + w * 0.56, deck_y - 4
-    for dx, dy in ((16, 0), (-16, 0), (0, 15), (0, -15), (11, 11), (-11, 11),
-                   (11, -11), (-11, -11)):
-        d.line((cx, cy, cx + dx, cy + dy), fill=SAND, width=3)
-    d.ellipse((cx - 7, cy - 7, cx + 7, cy + 7), fill=(248, 226, 154))
-    d.rectangle((cx - 3, deck_y + 8, cx + 3, y1), fill=(120, 40, 34))
+        d.line((x + s * 0.30, y + s * (0.30 + i * 0.16),
+                x + s * 0.16, y + s * (0.34 + i * 0.16)), fill=SAND, width=3)
 
 
-def art_cyclone(d: ImageDraw.ImageDraw, box) -> None:
-    """Storm spiral over a teal sea, land to the right, track arrow inland."""
-    x0, y0, x1, y1 = box
-    w, h = x1 - x0, y1 - y0
-    d.rectangle(box, fill=TEAL)
-    d.polygon([(x0 + w * 0.74, y1), (x0 + w * 0.80, y0 + h * 0.30),
-               (x1, y0 + h * 0.16), (x1, y1)], fill=SAND)
-    cx, cy = x0 + w * 0.40, y0 + h * 0.52
-    for r, wd in ((66, 9), (44, 8), (22, 7)):
+def g_politics(d, x, y, s=56):
+    d.rectangle((x + s * 0.14, y + s * 0.56, x + s * 0.50, y + s * 0.66), fill=BLUE)
+    d.polygon([(x + s * 0.28, y + s * 0.30), (x + s * 0.52, y + s * 0.30),
+               (x + s * 0.46, y + s * 0.56), (x + s * 0.34, y + s * 0.56)], fill=BLUE)
+    d.line((x + s * 0.62, y + s * 0.30, x + s * 0.62, y + s * 0.60), fill=INK, width=3)
+    d.ellipse((x + s * 0.58, y + s * 0.16, x + s * 0.66, y + s * 0.26), fill=INK)
+    d.rectangle((x + s * 0.58, y + s * 0.26, x + s * 0.66, y + s * 0.31), fill=INK)
+
+
+def g_money(d, x, y, s=56):
+    d.line((x + s * 0.14, y + s * 0.78, x + s * 0.86, y + s * 0.78), fill=STONE, width=3)
+    d.line((x + s * 0.14, y + s * 0.14, x + s * 0.14, y + s * 0.78), fill=STONE, width=3)
+    pts = [(0.20, 0.40), (0.36, 0.30), (0.50, 0.52), (0.64, 0.44), (0.84, 0.72)]
+    poly = [(x + s * px, y + s * py) for px, py in pts]
+    d.line(poly, fill=BLUE, width=4, joint="curve")
+    d.polygon([(x + s * 0.84, y + s * 0.86), (x + s * 0.78, y + s * 0.66),
+               (x + s * 0.92, y + s * 0.70)], fill=RED)
+
+
+def g_climate(d, x, y, s=56):
+    r = s * 0.34
+    cx, cy = x + s * 0.50, y + s * 0.46
+    d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=TEAL, width=4)
+    d.arc((cx - r, cy - r * 0.5, cx + r, cy + r * 0.5), 0, 360, fill=TEAL, width=3)
+    d.line((cx, cy - r, cx, cy + r), fill=TEAL, width=2)
+    d.rectangle((cx + r * 0.72, y + s * 0.20, cx + r * 0.94, y + s * 0.72), fill=RED)
+    d.ellipse((cx + r * 0.66, y + s * 0.66, cx + r * 1.02, y + s * 0.88), fill=RED)
+
+
+def g_justice(d, x, y, s=56):
+    d.line((x + s * 0.50, y + s * 0.16, x + s * 0.50, y + s * 0.74), fill=INK, width=3)
+    d.line((x + s * 0.20, y + s * 0.28, x + s * 0.80, y + s * 0.28), fill=INK, width=3)
+    d.line((x + s * 0.26, y + s * 0.74, x + s * 0.74, y + s * 0.74), fill=INK, width=3)
+    for cx in (x + s * 0.22, x + s * 0.78):
+        d.line((cx, y + s * 0.28, cx, y + s * 0.44), fill=INK, width=2)
+        d.polygon([(cx - s * 0.12, y + s * 0.44), (cx + s * 0.12, y + s * 0.44),
+                   (cx, y + s * 0.60)], fill=INK)
+
+
+def g_people(d, x, y, s=56):
+    for i, dx in enumerate((0.20, 0.46, 0.72)):
+        r = s * 0.10
+        cx = x + s * dx
+        d.ellipse((cx - r, y + s * 0.24, cx + r, y + s * 0.24 + 2 * r), fill=INK)
+        d.polygon([(cx - s * 0.13, y + s * 0.70), (cx - s * 0.09, y + s * 0.46),
+                   (cx + s * 0.09, y + s * 0.46), (cx + s * 0.13, y + s * 0.70)],
+                  fill=INK)
+
+
+def g_tech(d, x, y, s=56):
+    d.rectangle((x + s * 0.28, y + s * 0.28, x + s * 0.72, y + s * 0.72), fill=BLUE)
+    for i in range(3):
+        o = s * (0.34 + i * 0.14)
+        d.line((x + s * 0.16, y + o, x + s * 0.28, y + o), fill=BLUE, width=3)
+        d.line((x + s * 0.72, y + o, x + s * 0.84, y + o), fill=BLUE, width=3)
+        d.line((x + o, y + s * 0.16, x + o, y + s * 0.28), fill=BLUE, width=3)
+        d.line((x + o, y + s * 0.72, x + o, y + s * 0.84), fill=BLUE, width=3)
+
+
+def g_disaster(d, x, y, s=56):
+    for i in range(3):
+        yy = y + s * (0.34 + i * 0.18)
+        pts = []
+        for k in range(9):
+            px = x + s * 0.10 + s * 0.80 * k / 8
+            pts.append((px, yy + (s * 0.06 if k % 2 else 0)))
+        d.line(pts, fill=TEAL, width=4)
+    d.polygon([(x + s * 0.62, y + s * 0.14), (x + s * 0.84, y + s * 0.14),
+               (x + s * 0.84, y + s * 0.40), (x + s * 0.62, y + s * 0.40)], fill=RED)
+
+
+def g_science(d, x, y, s=56):
+    cx, cy = x + s * 0.50, y + s * 0.50
+    d.ellipse((cx - 5, cy - 5, cx + 5, cy + 5), fill=TEAL)
+    d.arc((cx - s * 0.30, cy - s * 0.12, cx + s * 0.30, cy + s * 0.12), 0, 360,
+          fill=TEAL, width=3)
+    d.arc((cx - s * 0.12, cy - s * 0.30, cx + s * 0.12, cy + s * 0.30), 0, 360,
+          fill=TEAL, width=3)
+
+
+def g_cyclone(d, x, y, s=56):
+    cx, cy = x + s * 0.50, y + s * 0.50
+    for r, wd in ((s * 0.30, 4), (s * 0.20, 4), (s * 0.10, 4)):
         d.arc((cx - r, cy - r * 0.72, cx + r, cy + r * 0.72), 20, 300,
-              fill=(255, 255, 255), width=wd)
-    d.ellipse((cx - 6, cy - 6, cx + 6, cy + 6), fill=(255, 255, 255))
-    ax0, ay0 = x0 + w * 0.40, y0 + h * 0.30
-    ax1, ay1 = x0 + w * 0.88, y0 + h * 0.34
-    d.line((ax0, ay0, ax1, ay1), fill=(255, 255, 255), width=3)
-    d.polygon([(ax1 + 12, ay1 + 2), (ax1 - 6, ay1 - 7), (ax1 - 6, ay1 + 11)],
-              fill=(255, 255, 255))
-    for i in range(20):
-        rx = x0 + 8 + (i * 37) % (w - 16)
-        ry = y0 + 10 + (i * 53) % int(h * 0.32)
-        d.line((rx, ry, rx + 5, ry + 10), fill=(214, 236, 236), width=2)
+              fill=TEAL, width=wd)
+    d.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=TEAL)
 
 
-def art_chart(d: ImageDraw.ImageDraw, box) -> None:
-    """A market chart breaking down, labelled with the day's fall."""
-    x0, y0, x1, y1 = box
-    w, h = x1 - x0, y1 - y0
-    d.rectangle(box, fill=CARD)
-    pct = "-4.8%"
-    f_pct = font(SANS_BK, 36)
-    d.text((x1 - 14 - text_w(d, pct, f_pct), y0 + 2), pct, font=f_pct, fill=RED)
-    plot_top = y0 + int(h * 0.48)
-    plot_h = h - (plot_top - y0) - 10
-    for i in range(1, 4):
-        gy = plot_top + plot_h * i / 4.0
-        d.line((x0 + 12, gy, x1 - 12, gy), fill=STONE, width=1)
-    pts = [(0.00, 0.10), (0.14, 0.02), (0.28, 0.26), (0.42, 0.20),
-           (0.56, 0.44), (0.70, 0.38), (0.84, 0.66), (1.00, 0.86)]
-    poly = [(x0 + 14 + (w - 28) * px, plot_top + plot_h * py) for px, py in pts]
-    d.line(poly, fill=BLUE, width=5, joint="curve")
-    for px, py in poly[:-1]:
-        d.ellipse((px - 3, py - 3, px + 3, py + 3), fill=BLUE)
-    d.line(poly[-2] + poly[-1], fill=RED, width=8)
-    ex, ey = poly[-1]
-    d.polygon([(ex + 2, ey + 11), (ex - 16, ey - 2), (ex + 5, ey - 11)], fill=RED)
+def g_energy(d, x, y, s=56):
+    d.polygon([(x + s * 0.56, y + s * 0.12), (x + s * 0.30, y + s * 0.54),
+               (x + s * 0.48, y + s * 0.54), (x + s * 0.40, y + s * 0.86),
+               (x + s * 0.70, y + s * 0.42), (x + s * 0.52, y + s * 0.42)],
+              fill=SAND)
 
 
 # ---------------------------------------------------------------- the day
 
-
-SPLASH = [
-    {
-        "art": art_bridge,
-        "place": "UKRAINE",
-        "head": "Russia's biggest strike of the war hits three Kyiv bridges",
-        "deck": "400 drones and 110 missiles; 8 killed and power cut across the west.",
-        "source": "REUTERS · BBC",
-        "accent": RED,
-    },
-    {
-        "art": art_cyclone,
-        "place": "INDIA",
-        "head": "Cyclone Akvan comes ashore in Odisha",
-        "deck": "370,000 evacuated before landfall near Gopalpur; 70-80 km/h winds.",
-        "source": "IMD · PTI",
-        "accent": RED,
-    },
-    {
-        "art": art_chart,
-        "place": "MARKETS",
-        "head": "AI sell-off sinks Asia's shares",
-        "deck": "Tokyo fell 4.8%, SoftBank 16%; Seoul halted sell orders on its index.",
-        "source": "CNBC · AL JAZEERA",
-        "accent": BLUE,
-    },
+METRICS = [
+    ("8", "KILLED IN KYIV"),
+    ("370,000", "EVACUATED, ODISHA"),
+    ("-4.8%", "NIKKEI 225"),
+    ("111", "CAUGHT CHEATING"),
+    ("$2.36bn", "GTA VI, DAY ONE"),
+    ("EUR 26bn", "ITALY'S BUDGET"),
 ]
 
-CARDS = [
-    ("BRUSSELS", "UK and EU agree youth mobility deal", BLUE),
-    ("ANTALYA", "COP31 climate draft drops phaseout", BLUE),
-    ("ROME", "CGIL strike over Italy's budget", RED),
-    ("POLAND", "Missile debris falls in eastern Poland", RED),
+TILES = [
+    ("UKRAINE", "Russia's biggest strike hits Kyiv bridges", g_war, RED),
+    ("INDIA", "Cyclone Akvan comes ashore in Odisha", g_cyclone, TEAL),
+    ("MARKETS", "AI sell-off sinks Asia's shares", g_money, BLUE),
+    ("ANTALYA", "COP31 draft drops the fuel phaseout", g_climate, TEAL),
+    ("BRUSSELS", "UK and EU agree youth mobility deal", g_politics, BLUE),
+    ("THE HAGUE", "Sanctions urged after ICJ genocide ruling", g_justice, INK),
+    ("POLAND", "Missile debris falls in eastern Poland", g_war, RED),
+    ("ROME", "CGIL strike over Italy's budget", g_people, RED),
+    ("WASHINGTON", "Senate passes permitting overhaul", g_politics, BLUE),
+    ("SEOUL", "111 caught cheating in Suneung", g_people, BLUE),
+    ("IRAQ", "Iran-backed militia told to leave", g_war, RED),
+    ("PACIFIC", "US auctions deep-sea mining leases", g_energy, SAND),
 ]
 
 BRIEFS = [
-    ("WASHINGTON", "Senate passes permitting bill", BLUE),
-    ("SEOUL", "111 caught cheating in Suneung", BLUE),
-    ("IRAQ", "Iran-backed militia told to leave", RED),
-    ("CALIFORNIA", "Nvidia subpoenaed on China chips", BLUE),
-    ("PACIFIC", "US auctions deep-sea mining leases", BLUE),
-    ("THE HAGUE", "Sanctions urged after ICJ ruling", BLUE),
-    ("SUDAN", "Drone strike kills 10 at gold mine", RED),
-    ("NEW YORK", "GTA VI takes $2.36bn on day one", BLUE),
-    ("TOKYO", "Core inflation at a 2026 high", BLUE),
-    ("BUDAPEST", "Hungary lifts veto on Ukraine talks", BLUE),
-    ("LISBON", "Public-sector strike hits hospitals", RED),
-    ("HORMUZ", "Tanker burns after hitting a mine", RED),
-    ("RIYADH", "Houthi missiles hit KAFD district", RED),
-    ("GAZA", "Troops cross the Yellow Line", RED),
-    ("PYONGYANG", "IAEA sees Yongbyon expansion", RED),
-    ("CARACAS", "US and Venezuela sign military pact", BLUE),
-    ("COPENHAGEN", "Greenland security deal ratified", BLUE),
-    ("ISLAMABAD", "22 militants killed in border raids", RED),
-    ("BRASILIA", "Central bank sells $1bn of reserves", BLUE),
-    ("SINGAPORE", "TikTok adds deepfake detection", BLUE),
-    ("BOGOTA", "Thousands march against tax reform", RED),
-    ("FRANKFURT", "Lufthansa to cut 1,000 jobs", BLUE),
-    ("AMAZON", "Lula recognises Chief Raoni's land", BLUE),
-    ("SENEGAL", "Boat capsizes; dozens missing", RED),
-    ("GENEVA", "IMF sees debt near 100% of GDP", BLUE),
-    ("MOGADISHU", "Somalia expels UAE ambassador", BLUE),
+    ("CALIFORNIA", "Nvidia subpoenaed over chips", g_tech),
+    ("NEW YORK", "GTA VI: $2.36bn in a day", g_money),
+    ("TOKYO", "Core inflation at a 2026 high", g_money),
+    ("BUDAPEST", "Hungary lifts EU veto", g_politics),
+    ("LISBON", "Strike hits hospitals", g_people),
+    ("HORMUZ", "Tanker burns on a mine", g_war),
+    ("RIYADH", "Houthi missiles hit KAFD", g_war),
+    ("GAZA", "Troops cross the Yellow Line", g_war),
+    ("PYONGYANG", "IAEA sees Yongbyon expansion", g_science),
+    ("CARACAS", "US-Venezuela military pact", g_politics),
+    ("COPENHAGEN", "Greenland deal ratified", g_politics),
+    ("ISLAMABAD", "22 militants killed", g_war),
+    ("BRASILIA", "Bank sells $1bn reserves", g_money),
+    ("SINGAPORE", "TikTok deepfake detection", g_tech),
+    ("BOGOTA", "Tax reform protests", g_people),
+    ("FRANKFURT", "Lufthansa to cut 1,000 jobs", g_money),
+    ("AMAZON", "Lula recognises Raoni's land", g_climate),
+    ("SENEGAL", "Boat capsizes; dozens missing", g_disaster),
+    ("GENEVA", "IMF: debt near 100% of GDP", g_money),
+    ("MOGADISHU", "Somalia expels UAE ambassador", g_politics),
+    ("HARARE", "250,000 landmines destroyed", g_disaster),
+    ("NAIROBI", "Runner banned three years", g_people),
+    ("PORT-AU-PRINCE", "34 gang suspects killed", g_war),
+    ("DHAKA", "Hasina backers riot", g_people),
+    ("ULAANBAATAR", "Mongolia's president resigns", g_politics),
+    ("LOS ANGELES", "El Nino flood risk", g_disaster),
+    ("VATICAN", "Christmas tree raised", g_people),
+    ("SYDNEY", "Marathon title stripped", g_people),
+    ("ADDIS ABABA", "Artillery near Badme", g_war),
+    ("BERLIN", "Youth strike on rearmament", g_people),
 ]
 
-TOTAL_STORIES = len(SPLASH) + len(CARDS) + len(BRIEFS)
+REGIONS = [
+    ("EUROPE", 13, BLUE),
+    ("ASIA", 8, RED),
+    ("AMERICAS", 9, GREEN),
+    ("MIDEAST", 4, PLUM),
+    ("AFRICA", 5, SAND),
+    ("PACIFIC", 2, TEAL),
+    ("GLOBAL", 1, MUTED),
+]
+
+TOTAL = len(TILES) + len(BRIEFS)
 
 
 def build() -> Image.Image:
     img = Image.new("RGB", (W, H), PAPER)
     d = ImageDraw.Draw(img)
 
-    # ---- masthead -------------------------------------------------
-    f_kick = font(SANS_BK, 20)
-    draw_tracked(d, (M, 30), "WORLD NEWS · ONE DAY", f_kick, INK, track=2)
-    right = f"{TOTAL_STORIES} STORIES · 7 REGIONS"
-    f_kick_r = font(SANS_BK, 20)
-    rw = text_w(d, right, f_kick_r, track=2)
-    draw_tracked(d, (W - M - rw, 30), right, f_kick_r, MUTED, track=2)
+    f_kick = font(SANS_BK, 19)
+    draw_tracked(d, (M, 26), "WORLD NEWS · ONE DAY", f_kick, INK, track=2)
+    right = f"{TOTAL} STORIES · 7 REGIONS"
+    rw = text_w(d, right, f_kick, track=2)
+    draw_tracked(d, (W - M - rw, 26), right, f_kick, MUTED, track=2)
 
     date = "FRIDAY 20 NOVEMBER 2026"
-    f_date = fit_line(d, date, SERIF_B, W - 2 * M, 92, 56)
+    f_date = fit_line(d, date, SERIF_B, W - 2 * M, 88, 54)
     dw = text_w(d, date, f_date)
-    d.text(((W - dw) / 2, 58), date, font=f_date, fill=INK)
+    d.text(((W - dw) / 2, 52), date, font=f_date, fill=INK)
+    date_bottom = 52 + int(f_date.size * 1.02)
+    d.rectangle((M, date_bottom + 4, W - M, date_bottom + 9), fill=INK)
 
-    date_bottom = 58 + int(f_date.size * 1.02)
-    d.rectangle((M, date_bottom + 5, W - M, date_bottom + 11), fill=INK)
-
-    f_strap = font(SERIF_I, 21)
+    f_strap = font(SERIF_I, 19)
     strap = "Reported by Reuters, AP, BBC, AFP, PTI and CNBC · every story from this one day"
-    d.text(((W - text_w(d, strap, f_strap)) / 2, date_bottom + 19), strap,
+    d.text(((W - text_w(d, strap, f_strap)) / 2, date_bottom + 15), strap,
            font=f_strap, fill=MUTED)
 
-    top = date_bottom + 50
+    # ---- metrics bar ---------------------------------------------
+    bar_top = date_bottom + 44
+    bar_h = 64
+    cell_w = (W - 2 * M) / len(METRICS)
+    d.rectangle((M, bar_top, W - M, bar_top + bar_h), fill=CARD)
+    d.rectangle((M, bar_top, W - M, bar_top + 3), fill=INK)
+    f_val = font(SANS_BK, 26)
+    f_lab = font(SANS_BK, 13)
+    for i, (val, lab) in enumerate(METRICS):
+        cx = M + cell_w * i
+        d.text((cx + 12, bar_top + 6), val, font=f_val,
+               fill=RED if i < 3 else BLUE)
+        for j, ln in enumerate(wrap(d, lab, f_lab, int(cell_w) - 22)[:2]):
+            d.text((cx + 12, bar_top + 37 + j * 14), ln, font=f_lab, fill=MUTED)
+        if i:
+            d.line((cx, bar_top + 8, cx, bar_top + bar_h - 8), fill=STONE, width=1)
 
-    # ---- three splashes ------------------------------------------
-    ART_H = 118
-    H_HEAD, H_DECK = 35, 19
-    SRC_H = 18
-    f_deck = font(SANS, H_DECK)
-    lh_deck = int(H_DECK * 1.22)
-
-    splash_bottom = top
-    for i, s in enumerate(SPLASH):
-        x = M + i * (COLW + GUTTER)
-        art_box = (x, top, x + COLW, top + ART_H)
-        s["art"](d, art_box)
-        d.rectangle((x, top, x + COLW, top + ART_H), outline=INK, width=2)
-        f_tag = font(SANS_BK, 18)
-        tag_w = text_w(d, s["place"], f_tag, track=2) + 16
-        d.rectangle((x + 8, top + 8, x + 8 + tag_w, top + 34), fill=s["accent"])
-        draw_tracked(d, (x + 16, top + 12), s["place"], f_tag, PAPER, track=2)
-
-        hf = fit_block(d, s["head"], SERIF_B, H_HEAD, 28, COLW, 3)
-        hlines = wrap(d, s["head"], hf, COLW)
-        y = top + ART_H + 12
-        for ln in hlines:
-            d.text((x, y), ln, font=hf, fill=INK)
-            y += int(hf.size * 1.09)
-        y += 5
-        dlines = wrap(d, s["deck"], f_deck, COLW)
-        assert len(dlines) <= 3, f"deck too long: {s['place']} {len(dlines)}"
-        for ln in dlines:
-            d.text((x, y), ln, font=f_deck, fill=INK)
-            y += lh_deck
-        f_src = font(SANS_BK, SRC_H)
-        draw_tracked(d, (x, y + 5), s["source"], f_src, s["accent"], track=1)
-        splash_bottom = max(splash_bottom, y + 5 + SRC_H)
-
-    # ---- four cards, one row -------------------------------------
-    grid_top = splash_bottom + 16
-    card_h, card_gap = 74, 14
-    card_w = (W - 2 * M - 3 * card_gap) // 4
-    f_num = font(SANS_BK, 18)
-    f_place = font(SANS_BK, 16)
-    for idx, (place, head, accent) in enumerate(CARDS):
-        x = M + idx * (card_w + card_gap)
-        d.rectangle((x, grid_top, x + card_w, grid_top + card_h), fill=CARD,
-                    outline=STONE, width=1)
-        d.rectangle((x, grid_top, x + card_w, grid_top + 5), fill=accent)
-        d.text((x + 11, grid_top + 12), f"{idx + 4}", font=f_num, fill=accent)
-        draw_tracked(d, (x + 38, grid_top + 14), place, f_place, MUTED, track=1)
-        hf = fit_block(d, head, SERIF_B, 19, 16, card_w - 22, 2)
-        lines = wrap(d, head, hf, card_w - 22)
-        assert len(lines) <= 2, f"card headline too long: {place}"
-        hy = grid_top + 33
+    # ---- twelve illustrated tiles --------------------------------
+    tiles_top = bar_top + bar_h + 12
+    cols, gap = 3, 10
+    tile_w = (W - 2 * M - (cols - 1) * gap) // cols
+    tile_h = 74
+    rows = (len(TILES) + cols - 1) // cols
+    f_num = font(SANS_BK, 15)
+    f_place = font(SANS_BK, 15)
+    for idx, (place, head, glyph, accent) in enumerate(TILES):
+        r, c = divmod(idx, cols)
+        x = M + c * (tile_w + gap)
+        y = tiles_top + r * (tile_h + gap)
+        d.rectangle((x, y, x + tile_w, y + tile_h), fill=CARD, outline=STONE, width=1)
+        d.rectangle((x, y, x + 56, y + 56), fill=(240, 235, 224))
+        glyph(d, x + 2, y + 2, 52)
+        d.text((x + 60, y + 6), f"{idx + 1}", font=f_num, fill=accent)
+        draw_tracked(d, (x + 78, y + 7), place, f_place, MUTED, track=1)
+        hf = fit_block(d, head, SERIF_B, 18, 15, tile_w - 66, 2)
+        lines = wrap(d, head, hf, tile_w - 66)
+        assert len(lines) <= 2, f"tile headline too long: {place}"
+        hy = y + 26
         for ln in lines:
-            d.text((x + 11, hy), ln, font=hf, fill=INK)
-            hy += 19
-    grid_bottom = grid_top + card_h
+            d.text((x + 60, hy), ln, font=hf, fill=INK)
+            hy += 18
+    tiles_bottom = tiles_top + rows * tile_h + (rows - 1) * gap
 
-    # ---- the rest of the day, two columns ------------------------
-    briefs_top = grid_bottom + 14
-    d.rectangle((M, briefs_top, W - M, briefs_top + 4), fill=INK)
-    f_label = font(SANS_BK, 18)
-    draw_tracked(d, (M, briefs_top + 7), "ALSO ON THE DAY", f_label, MUTED, track=2)
-    rows = (len(BRIEFS) + 1) // 2
-    f_b_place = font(SANS_BK, 16)
-    f_b_text = font(SERIF, 19)
-    col_w = (W - 2 * M - 26) // 2
-    lh_b = 23
-    y0 = briefs_top + 32
-    for idx, (place, head, accent) in enumerate(BRIEFS):
-        col, row = idx // rows, idx % rows
-        x = M + col * (col_w + 26)
-        y = y0 + row * lh_b
-        d.rectangle((x, y + 5, x + 6, y + 11), fill=accent)
-        px = draw_tracked(d, (x + 15, y + 1), place, f_b_place, INK, track=1)
-        d.text((px + 9, y - 1), head, font=f_b_text, fill=INK)
-        assert px + 9 + text_w(d, head, f_b_text) <= x + col_w, \
-            f"brief overflows its column: {place} / {head}"
-    briefs_bottom = y0 + (rows - 1) * lh_b + 22
+    # ---- region bar ----------------------------------------------
+    reg_top = tiles_bottom + 12
+    seg_w = (W - 2 * M) / len(REGIONS)
+    d.rectangle((M, reg_top, W - M, reg_top + 26), fill=STONE)
+    f_seg = font(SANS_BK, 15)
+    for i, (name, n, col) in enumerate(REGIONS):
+        x = M + seg_w * i
+        d.rectangle((x, reg_top, x + seg_w - 2, reg_top + 26), fill=col)
+        label = f"{n}"
+        d.text((x + 10, reg_top + 6), label, font=f_seg, fill=PAPER)
+    f_reg = font(SANS_BK, 13)
+    for i, (name, n, col) in enumerate(REGIONS):
+        x = M + seg_w * i
+        d.text((x + 10, reg_top + 28), name, font=f_reg, fill=MUTED)
 
-    # ---- footer --------------------------------------------------
-    foot_rule = max(briefs_bottom + 10, H - 46)
-    assert foot_rule + 42 <= H, f"footer overruns the page (rule at {foot_rule})"
-    d.rectangle((M, foot_rule, W - M, foot_rule + 3), fill=STONE)
-    f_foot = font(SANS, 17)
-    foot = ("Date check: every story above happened, or was first reported, on "
-            "Friday 20 November 2026; reporting that first broke earlier, such as "
-            "the Shenzhen summit, is left out.")
-    flines = wrap(d, foot, f_foot, W - 2 * M)
-    assert len(flines) <= 2, "footer too long"
-    fy = foot_rule + 8
-    for ln in flines:
-        d.text((M, fy), ln, font=f_foot, fill=MUTED)
-        fy += 19
+    # ---- briefs, two columns -------------------------------------
+    briefs_top = reg_top + 50
+    d.rectangle((M, briefs_top, W - M, briefs_top + 3), fill=INK)
+    cols_b = 2
+    rows_b = (len(BRIEFS) + cols_b - 1) // cols_b
+    col_w = (W - 2 * M - 14) // cols_b
+    lh = 21
+    f_b_place = font(SANS_BK, 13)
+    f_b_text = font(SERIF, 15)
+    y0 = briefs_top + 10
+    for idx, (place, head, glyph) in enumerate(BRIEFS):
+        col, row = divmod(idx, rows_b)
+        x = M + col * (col_w + 14)
+        y = y0 + row * lh
+        d.rectangle((x, y + 5, x + 5, y + 10), fill=MUTED)
+        px = draw_tracked(d, (x + 11, y + 1), place, f_b_place, INK, track=1)
+        d.text((px + 7, y), head, font=f_b_text, fill=INK)
+        assert px + 7 + text_w(d, head, f_b_text) <= x + col_w, \
+            f"brief overflows: {place} / {head}"
+    briefs_bottom = y0 + (rows_b - 1) * lh + 18
 
+    # ---- date check ----------------------------------------------
+    box_top = H - 58
+    assert briefs_bottom <= box_top - 6, f"briefs overrun the footer ({briefs_bottom})"
+    d.rectangle((M, box_top, W - M, H - 12), outline=RED, width=2)
+    f_dc_lab = font(SANS_BK, 14)
+    d.text((M + 12, box_top + 8), "DATE CHECK", font=f_dc_lab, fill=RED)
+    f_dc = font(SANS, 14)
+    note = ("Every story above happened, or was first reported, on Friday 20 November 2026. "
+            "The Shenzhen summit, Anthropic's debut and the ICJ verdict broke earlier and are left out.")
+    nx = M + 118
+    for j, ln in enumerate(wrap(d, note, f_dc, W - nx - M - 12)[:2]):
+        d.text((nx, box_top + 8 + j * 16), ln, font=f_dc, fill=MUTED)
     return img
 
 
