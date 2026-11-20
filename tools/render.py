@@ -96,6 +96,22 @@ def draw_tracked(d, xy, s, f, fill, track=0):
     return x
 
 
+def mix(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def vgrad(d, box, top, bottom, steps=None):
+    """Vertical gradient fill inside box (never behind type)."""
+    x0, y0, x1, y1 = box
+    h = max(1, y1 - y0)
+    steps = steps or h
+    for i in range(steps):
+        c = mix(top, bottom, i / max(1, steps - 1))
+        yy = y0 + h * i // steps
+        yy2 = y0 + h * (i + 1) // steps
+        d.rectangle((x0, yy, x1, max(yy + 1, yy2)), fill=c)
+
+
 # ---------------------------------------------------------------- glyphs
 # One flat mark per field, so every story carries a picture rather than a line.
 
@@ -285,10 +301,11 @@ def build() -> Image.Image:
     d = ImageDraw.Draw(img)
 
     f_kick = font(SANS_BK, 19)
-    draw_tracked(d, (M, 26), "WORLD NEWS · ONE DAY", f_kick, INK, track=2)
+    d.rectangle((0, 0, W, 46), fill=INK)
+    draw_tracked(d, (M, 14), "WORLD NEWS · ONE DAY", f_kick, PAPER, track=2)
     right = f"{TOTAL} STORIES · 7 REGIONS"
     rw = text_w(d, right, f_kick, track=2)
-    draw_tracked(d, (W - M - rw, 26), right, f_kick, MUTED, track=2)
+    draw_tracked(d, (W - M - rw, 14), right, f_kick, (208, 198, 180), track=2)
 
     date = "FRIDAY 20 NOVEMBER 2026"
     f_date = fit_line(d, date, SERIF_B, W - 2 * M, 88, 54)
@@ -306,7 +323,7 @@ def build() -> Image.Image:
     bar_top = date_bottom + 44
     bar_h = 64
     cell_w = (W - 2 * M) / len(METRICS)
-    d.rectangle((M, bar_top, W - M, bar_top + bar_h), fill=CARD)
+    vgrad(d, (M, bar_top, W - M, bar_top + bar_h), (236, 229, 214), CARD)
     d.rectangle((M, bar_top, W - M, bar_top + 3), fill=INK)
     f_val = font(SANS_BK, 26)
     f_lab = font(SANS_BK, 13)
@@ -332,8 +349,12 @@ def build() -> Image.Image:
         x = M + c * (tile_w + gap)
         y = tiles_top + r * (tile_h + gap)
         d.rectangle((x, y, x + tile_w, y + tile_h), fill=CARD, outline=STONE, width=1)
-        d.rectangle((x, y, x + 56, y + 56), fill=(240, 235, 224))
-        glyph(d, x + 2, y + 2, 52)
+        vgrad(d, (x + 1, y + 1, x + 56, y + 56), mix(accent, PAPER, 0.48),
+              mix(accent, PAPER, 0.06))
+        d.ellipse((x + 36, y + 6, x + 52, y + 22), fill=mix(PAPER, SAND, 0.35))
+        d.rectangle((x + 1, y + 40, x + 56, y + 56), fill=mix(accent, INK, 0.55))
+        d.rectangle((x + 1, y + 40, x + 56, y + 42), fill=mix(accent, INK, 0.30))
+        glyph(d, x + 1, y + 1, 54)
         d.text((x + 60, y + 6), f"{idx + 1}", font=f_num, fill=accent)
         draw_tracked(d, (x + 78, y + 7), place, f_place, MUTED, track=1)
         hf = fit_block(d, head, SERIF_B, 18, 15, tile_w - 66, 2)
