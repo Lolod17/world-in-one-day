@@ -280,13 +280,7 @@ def build() -> Image.Image:
     d.text(((W - text_w(d, strap, f_strap)) / 2, date_bottom + 19), strap,
            font=f_strap, fill=MUTED)
 
-    counts = ("EUROPE 11 · ASIA 6 · AMERICAS 7 · MIDEAST 4 · AFRICA 3 · "
-              "PACIFIC 1 · GLOBAL MARKETS 1")
-    f_counts = font(SANS_BK, 18)
-    draw_tracked(d, ((W - text_w(d, counts, f_counts, track=1)) / 2,
-                     date_bottom + 44), counts, f_counts, MUTED, track=1)
-
-    top = date_bottom + 74
+    top = date_bottom + 50
 
     # ---- three splashes ------------------------------------------
     ART_H = 118
